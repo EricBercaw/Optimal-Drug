@@ -6,3 +6,4 @@ data/*.csv
 data/*.xlsx
 data/*.json
 .vscode/
+data/raw/
