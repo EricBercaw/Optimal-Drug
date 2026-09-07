@@ -5,37 +5,14 @@ def get_drug_options(
     ndc=None,
 ):
     """
-    Filter pharmaceutical pricing data using optional user criteria.
-
+    Filter VA pharmaceutical pricing data.
     All filters are optional.
-
-    Parameters
-    ----------
-    df : pandas.DataFrame
-        Normalized pharmaceutical pricing data.
-
-    trade_name : str, optional
-        Partial match against TradeName.
-
-    generic_name : str, optional
-        Partial match against Generic.
-
-    ndc : str, optional
-        Partial match against NDCWithDashes.
-
-    Returns
-    -------
-    pandas.DataFrame
-        Filtered pricing data with all original and derived columns retained.
     """
 
     result = df.copy()
 
-    # ---------------------------------------------------------
-    # Trade name filter
-    # ---------------------------------------------------------
-
     if trade_name:
+
         result = result[
             result["TradeName"]
             .astype(str)
@@ -47,11 +24,8 @@ def get_drug_options(
             )
         ]
 
-    # ---------------------------------------------------------
-    # Generic name filter
-    # ---------------------------------------------------------
-
     if generic_name:
+
         result = result[
             result["Generic"]
             .astype(str)
@@ -63,11 +37,8 @@ def get_drug_options(
             )
         ]
 
-    # ---------------------------------------------------------
-    # NDC filter
-    # ---------------------------------------------------------
-
     if ndc:
+
         result = result[
             result["NDCWithDashes"]
             .astype(str)
@@ -79,4 +50,93 @@ def get_drug_options(
             )
         ]
 
-    return result.reset_index(drop=True)
+    return result.reset_index(
+        drop=True
+    )
+
+
+def get_medicare_options(
+    df,
+    drug_name=None,
+    hcpcs=None,
+    ndc=None,
+):
+    """
+    Filter Medicare Part B ASP/payment-limit data.
+
+    All filters are optional.
+    """
+
+    result = df.copy()
+
+    if drug_name:
+
+        masks = []
+
+        for column in [
+            "MedicareDrugName",
+            "MedicareDescription",
+        ]:
+
+            if column in result.columns:
+
+                masks.append(
+                    result[column]
+                    .astype(str)
+                    .str.contains(
+                        drug_name,
+                        case=False,
+                        na=False,
+                        regex=False,
+                    )
+                )
+
+        if masks:
+
+            combined_mask = masks[0]
+
+            for mask in masks[1:]:
+                combined_mask = (
+                    combined_mask
+                    | mask
+                )
+
+            result = result[
+                combined_mask
+            ]
+
+    if (
+        hcpcs
+        and "HCPCS" in result.columns
+    ):
+
+        result = result[
+            result["HCPCS"]
+            .astype(str)
+            .str.contains(
+                hcpcs,
+                case=False,
+                na=False,
+                regex=False,
+            )
+        ]
+
+    if (
+        ndc
+        and "NDC" in result.columns
+    ):
+
+        result = result[
+            result["NDC"]
+            .astype(str)
+            .str.contains(
+                ndc,
+                case=False,
+                na=False,
+                regex=False,
+            )
+        ]
+
+    return result.reset_index(
+        drop=True
+    )
