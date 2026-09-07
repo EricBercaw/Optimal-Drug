@@ -1,4 +1,5 @@
 import re
+
 import pandas as pd
 
 
@@ -16,9 +17,11 @@ def extract_strength(trade_name):
     if pd.isna(trade_name):
         return None, None
 
+    text = str(trade_name).upper().strip()
+
     match = re.search(
         r"(\d+(?:\.\d+)?)\s*(MCG|MG|G)",
-        str(trade_name).upper()
+        text,
     )
 
     if match:
@@ -29,15 +32,17 @@ def extract_strength(trade_name):
 
 def extract_package_quantity(package_description):
     """
-    Extract the number of units in the VA package description.
+    Extract the number of package units.
 
     Examples
     --------
     "'1X0.25ML'" -> 1
-    "'1X0.5ML'"  -> 1
-    "'1X1ML'"    -> 1
-    "2"          -> 2
-    "10X1ML"     -> 10
+    "1X0.5ML" -> 1
+    "10X1ML" -> 10
+    "1ML" -> 1
+    "2ML" -> 1
+    "1" -> 1
+    "2" -> 2
     """
 
     if pd.isna(package_description):
@@ -45,42 +50,115 @@ def extract_package_quantity(package_description):
 
     text = str(package_description).upper().strip()
 
-    # Remove surrounding quotes/apostrophes sometimes present in VA data
+    # VA data sometimes contains literal quotes
     text = text.strip("'\"")
 
-    # Examples: 1X0.25ML, 10X1ML
-    match = re.match(r"(\d+)\s*X", text)
+    # Examples:
+    # 1X0.25ML
+    # 2X4ML
+    # 10X1ML
+    match = re.match(
+        r"(\d+)\s*X",
+        text,
+    )
 
     if match:
         return float(match.group(1))
 
-    # Examples: 1, 2, 10
+    # A single container described by its volume
+    # Examples:
+    # 1ML
+    # 2ML
+    # 0.5ML
+    if re.fullmatch(
+        r"\d+(?:\.\d+)?\s*ML",
+        text,
+    ):
+        return 1.0
+
+    # Plain package counts
+    # Examples:
+    # 1
+    # 2
+    # 30
     try:
         return float(text)
+
     except ValueError:
         return None
 
 
 def normalize_va_catalog(df):
     """
-    Convert raw VA catalog data into standardized pricing fields.
+    Convert raw VA pharmaceutical pricing data into standardized
+    fields useful for unit-cost calculations.
     """
 
     result = df.copy()
 
-    strengths = result["TradeName"].apply(extract_strength)
+    # ---------------------------------------------------------
+    # Extract strength
+    # ---------------------------------------------------------
 
-    result["StrengthValue"] = strengths.apply(lambda x: x[0])
-    result["StrengthUnit"] = strengths.apply(lambda x: x[1])
+    strengths = result["TradeName"].apply(
+        extract_strength
+    )
+
+    result["StrengthValue"] = strengths.apply(
+        lambda x: x[0]
+    )
+
+    result["StrengthUnit"] = strengths.apply(
+        lambda x: x[1]
+    )
+
+    # ---------------------------------------------------------
+    # Extract package quantity
+    # ---------------------------------------------------------
 
     result["PackageQuantity"] = (
         result["PackageDescription"]
         .apply(extract_package_quantity)
     )
 
+    # ---------------------------------------------------------
+    # Price per package unit
+    # ---------------------------------------------------------
+
     result["PricePerPackageUnit"] = (
-        result["Price"] / result["PackageQuantity"]
+        result["Price"]
+        / result["PackageQuantity"]
     )
+
+    # ---------------------------------------------------------
+    # Total strength contained in package
+    #
+    # Example:
+    # 100 MG × package quantity 2 = 200 MG
+    # ---------------------------------------------------------
+
+    result["TotalStrengthPerPackage"] = (
+        result["StrengthValue"]
+        * result["PackageQuantity"]
+    )
+
+    # ---------------------------------------------------------
+    # Price per strength unit
+    #
+    # Examples:
+    # $1,216.29 / 125 MCG = $9.73 per MCG
+    #
+    # $8,479.22 / 200 MG = $42.40 per MG
+    # ---------------------------------------------------------
+
+    result["PricePerStrengthUnit"] = (
+        result["Price"]
+        / result["TotalStrengthPerPackage"]
+    )
+
+    # ---------------------------------------------------------
+    # Source
+    # ---------------------------------------------------------
 
     result["Source"] = "VA"
 
