@@ -1,3 +1,7 @@
+# ============================================================
+# VA search
+# ============================================================
+
 def get_drug_options(
     df,
     trade_name=None,
@@ -6,6 +10,7 @@ def get_drug_options(
 ):
     """
     Filter VA pharmaceutical pricing data.
+
     All filters are optional.
     """
 
@@ -55,6 +60,10 @@ def get_drug_options(
     )
 
 
+# ============================================================
+# Medicare search
+# ============================================================
+
 def get_medicare_options(
     df,
     drug_name=None,
@@ -62,12 +71,16 @@ def get_medicare_options(
     ndc=None,
 ):
     """
-    Filter Medicare Part B ASP/payment-limit data.
+    Filter Medicare Part B pricing data.
 
     All filters are optional.
     """
 
     result = df.copy()
+
+    # --------------------------------------------------------
+    # Drug-name search
+    # --------------------------------------------------------
 
     if drug_name:
 
@@ -96,6 +109,7 @@ def get_medicare_options(
             combined_mask = masks[0]
 
             for mask in masks[1:]:
+
                 combined_mask = (
                     combined_mask
                     | mask
@@ -105,10 +119,23 @@ def get_medicare_options(
                 combined_mask
             ]
 
-    if (
-        hcpcs
-        and "HCPCS" in result.columns
-    ):
+        else:
+
+            return result.iloc[
+                0:0
+            ].copy()
+
+    # --------------------------------------------------------
+    # HCPCS
+    # --------------------------------------------------------
+
+    if hcpcs:
+
+        if "HCPCS" not in result.columns:
+
+            return result.iloc[
+                0:0
+            ].copy()
 
         result = result[
             result["HCPCS"]
@@ -121,10 +148,111 @@ def get_medicare_options(
             )
         ]
 
-    if (
-        ndc
-        and "NDC" in result.columns
-    ):
+    # --------------------------------------------------------
+    # NDC
+    # --------------------------------------------------------
+
+    if ndc:
+
+        if "NDC" not in result.columns:
+
+            return result.iloc[
+                0:0
+            ].copy()
+
+        result = result[
+            result["NDC"]
+            .astype(str)
+            .str.contains(
+                ndc,
+                case=False,
+                na=False,
+                regex=False,
+            )
+        ]
+
+    return result.reset_index(
+        drop=True
+    )
+
+
+# ============================================================
+# RED BOOK test search
+# ============================================================
+
+def get_redbook_options(
+    df,
+    trade_name=None,
+    generic_name=None,
+    ndc=None,
+):
+    """
+    Filter synthetic RED BOOK-like test data.
+
+    This function does not connect to RED BOOK.
+
+    All filters are optional.
+    """
+
+    result = df.copy()
+
+    # --------------------------------------------------------
+    # Trade name
+    # --------------------------------------------------------
+
+    if trade_name:
+
+        if "TradeName" not in result.columns:
+
+            return result.iloc[
+                0:0
+            ].copy()
+
+        result = result[
+            result["TradeName"]
+            .astype(str)
+            .str.contains(
+                trade_name,
+                case=False,
+                na=False,
+                regex=False,
+            )
+        ]
+
+    # --------------------------------------------------------
+    # Generic name
+    # --------------------------------------------------------
+
+    if generic_name:
+
+        if "GenericName" not in result.columns:
+
+            return result.iloc[
+                0:0
+            ].copy()
+
+        result = result[
+            result["GenericName"]
+            .astype(str)
+            .str.contains(
+                generic_name,
+                case=False,
+                na=False,
+                regex=False,
+            )
+        ]
+
+    # --------------------------------------------------------
+    # NDC
+    # --------------------------------------------------------
+
+    if ndc:
+
+        if "NDC" not in result.columns:
+
+            return result.iloc[
+                0:0
+            ].copy()
 
         result = result[
             result["NDC"]

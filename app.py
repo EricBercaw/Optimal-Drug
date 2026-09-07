@@ -4,16 +4,30 @@ from io import BytesIO
 import pandas as pd
 import streamlit as st
 
-from src.sources.va import load_va_prices
-from src.normalize import normalize_va_catalog
+from src.sources.va import (
+    load_va_prices,
+)
+
 from src.sources.medicare import (
     discover_latest_cms_files,
     load_detected_cms_dataset,
     build_medicare_dataset,
 )
+
+from src.sources.redbook import (
+    REDBOOK_SOURCE_NAME,
+    create_redbook_test_template,
+    load_redbook_test_file,
+)
+
+from src.normalize import (
+    normalize_va_catalog,
+)
+
 from src.pricing import (
     get_drug_options,
     get_medicare_options,
+    get_redbook_options,
 )
 
 
@@ -29,29 +43,40 @@ st.set_page_config(
 
 
 # ============================================================
-# Helper functions
+# Source names
+# ============================================================
+
+VA_SOURCE = (
+    "VA Pharmaceutical Catalog"
+)
+
+MEDICARE_SOURCE = (
+    "Medicare Part B ASP"
+)
+
+
+# ============================================================
+# Helpers
 # ============================================================
 
 @st.cache_data
 def load_va_data():
-    """
-    Load and normalize VA pharmaceutical pricing data.
-    """
 
     df = load_va_prices()
 
-    return normalize_va_catalog(df)
+    return normalize_va_catalog(
+        df
+    )
 
 
 def clean_filter(value):
-    """
-    Convert blank user input to None.
-    """
 
     if value is None:
         return None
 
-    value = str(value).strip()
+    value = str(
+        value
+    ).strip()
 
     if value == "":
         return None
@@ -60,9 +85,6 @@ def clean_filter(value):
 
 
 def clean_filename(value):
-    """
-    Convert text into a filename-safe value.
-    """
 
     if not value:
         return "All"
@@ -81,11 +103,6 @@ def dataframe_to_excel(
     results_df,
     searches_df,
 ):
-    """
-    Create Excel workbook with:
-        1. Drug Prices
-        2. Searches
-    """
 
     output = BytesIO()
 
@@ -111,81 +128,64 @@ def dataframe_to_excel(
     return output.getvalue()
 
 
-def build_va_search_label(
+def build_search_label(
     trade_name=None,
     generic_name=None,
+    drug_name=None,
+    hcpcs=None,
     ndc=None,
 ):
-    """
-    Create readable VA search label.
-    """
 
     parts = []
 
     if trade_name:
+
         parts.append(
             f"Trade: {trade_name}"
         )
 
     if generic_name:
+
         parts.append(
             f"Generic: {generic_name}"
         )
 
-    if ndc:
-        parts.append(
-            f"NDC: {ndc}"
-        )
-
-    if not parts:
-        return "All VA Products"
-
-    return " | ".join(parts)
-
-
-def build_medicare_search_label(
-    drug_name=None,
-    hcpcs=None,
-    ndc=None,
-):
-    """
-    Create readable Medicare search label.
-    """
-
-    parts = []
-
     if drug_name:
+
         parts.append(
             f"Drug: {drug_name}"
         )
 
     if hcpcs:
+
         parts.append(
             f"HCPCS: {hcpcs}"
         )
 
     if ndc:
+
         parts.append(
             f"NDC: {ndc}"
         )
 
     if not parts:
-        return "All Medicare Products"
+        return "All Products"
 
-    return " | ".join(parts)
-
-
-def build_filename(searches_df):
-    """
-    Build dynamic output filename based on
-    source and number of searches.
-    """
-
-    access_date = (
-        date.today().isoformat()
+    return " | ".join(
+        parts
     )
 
-    number_searches = len(
+
+def build_filename(
+    searches_df,
+):
+
+    today = (
+        date.today()
+        .isoformat()
+    )
+
+    count = len(
         searches_df
     )
 
@@ -199,87 +199,91 @@ def build_filename(searches_df):
     )
 
     # --------------------------------------------------------
-    # Single search
+    # One search
     # --------------------------------------------------------
 
-    if number_searches == 1:
+    if count == 1:
 
-        row = searches_df.iloc[0]
+        row = searches_df.iloc[
+            0
+        ]
 
         source = row[
             "PricingSource"
         ]
 
         identifier = (
-            row.get(
-                "DrugIdentifier",
-                "",
-            )
-        )
-
-        identifier = (
             clean_filename(
-                identifier
+                row[
+                    "DrugIdentifier"
+                ]
             )
         )
 
-        if (
-            source
-            == "VA Pharmaceutical Catalog"
-        ):
+        if source == VA_SOURCE:
 
             return (
-                f"VA_"
-                f"VAPharm_"
+                f"VA_VAPharm_"
                 f"{identifier}_"
-                f"{access_date}.xlsx"
+                f"{today}.xlsx"
             )
 
-        if (
-            source
-            == "Medicare Part B ASP"
-        ):
+        if source == MEDICARE_SOURCE:
 
             return (
-                f"Medicare_"
-                f"ASP_"
+                f"Medicare_ASP_"
                 f"{identifier}_"
-                f"{access_date}.xlsx"
+                f"{today}.xlsx"
+            )
+
+        if source == REDBOOK_SOURCE_NAME:
+
+            return (
+                f"RedBook_Test_"
+                f"{identifier}_"
+                f"{today}.xlsx"
             )
 
     # --------------------------------------------------------
-    # Multiple searches - same source
+    # Multiple searches from same source
     # --------------------------------------------------------
 
     if len(sources) == 1:
 
-        source = sources[0]
+        source = sources[
+            0
+        ]
 
-        if (
-            source
-            == "VA Pharmaceutical Catalog"
-        ):
+        if source == VA_SOURCE:
 
-            return (
-                f"VA_"
-                f"VAPharm_"
-                f"MultiDrug_"
-                f"{number_searches}Searches_"
-                f"{access_date}.xlsx"
+            prefix = (
+                "VA_VAPharm"
             )
 
-        if (
-            source
-            == "Medicare Part B ASP"
-        ):
+        elif source == MEDICARE_SOURCE:
 
-            return (
-                f"Medicare_"
-                f"ASP_"
-                f"MultiDrug_"
-                f"{number_searches}Searches_"
-                f"{access_date}.xlsx"
+            prefix = (
+                "Medicare_ASP"
             )
+
+        elif source == REDBOOK_SOURCE_NAME:
+
+            prefix = (
+                "RedBook_Test"
+            )
+
+        else:
+
+            prefix = (
+                "DrugPrices"
+            )
+
+        return (
+            f"{prefix}_"
+            f"MultiDrug_"
+            f"{count}Searches_"
+            f"{today}.xlsx"
+        )
 
     # --------------------------------------------------------
     # Multiple sources
@@ -288,8 +292,8 @@ def build_filename(searches_df):
     return (
         f"MultiSource_"
         f"MultiDrug_"
-        f"{number_searches}Searches_"
-        f"{access_date}.xlsx"
+        f"{count}Searches_"
+        f"{today}.xlsx"
     )
 
 
@@ -301,27 +305,34 @@ if (
     "combined_results"
     not in st.session_state
 ):
-    st.session_state.combined_results = (
-        pd.DataFrame()
-    )
+
+    st.session_state[
+        "combined_results"
+    ] = pd.DataFrame()
 
 
 if (
     "search_history"
     not in st.session_state
 ):
-    st.session_state.search_history = []
+
+    st.session_state[
+        "search_history"
+    ] = []
 
 
 if (
     "medicare_dataset"
     not in st.session_state
 ):
-    st.session_state.medicare_dataset = None
+
+    st.session_state[
+        "medicare_dataset"
+    ] = None
 
 
 # ============================================================
-# Query CMS when a new app session launches
+# Query CMS once per Streamlit session
 # ============================================================
 
 if (
@@ -331,7 +342,9 @@ if (
 
     try:
 
-        st.session_state.cms_discovery = (
+        st.session_state[
+            "cms_discovery"
+        ] = (
             discover_latest_cms_files()
         )
 
@@ -341,13 +354,15 @@ if (
 
     except Exception as error:
 
-        st.session_state.cms_discovery = (
-            None
-        )
+        st.session_state[
+            "cms_discovery"
+        ] = None
 
         st.session_state[
             "cms_discovery_error"
-        ] = str(error)
+        ] = str(
+            error
+        )
 
 
 # ============================================================
@@ -365,33 +380,36 @@ st.write(
 
 
 # ============================================================
-# Load VA data
+# Load VA
 # ============================================================
 
 va_df = load_va_data()
 
 
 # ============================================================
-# Pricing source
+# Pricing source selector
 # ============================================================
 
 pricing_source = st.selectbox(
     "Pricing source",
     [
-        "VA Pharmaceutical Catalog",
-        "Medicare Part B ASP",
+        VA_SOURCE,
+        MEDICARE_SOURCE,
+        REDBOOK_SOURCE_NAME,
     ],
 )
 
 
 # ============================================================
-# Default input variables
+# Default variables
 # ============================================================
 
 trade_name = None
 generic_name = None
+
 drug_name = None
 hcpcs = None
+
 ndc = None
 
 medicare_mode = None
@@ -400,15 +418,15 @@ cms_confirmed = False
 payment_upload = None
 crosswalk_upload = None
 
+redbook_upload = None
+redbook_df = None
+
 
 # ============================================================
-# VA search interface
+# VA interface
 # ============================================================
 
-if (
-    pricing_source
-    == "VA Pharmaceutical Catalog"
-):
+if pricing_source == VA_SOURCE:
 
     st.subheader(
         "Search Criteria"
@@ -431,26 +449,20 @@ if (
 
 
 # ============================================================
-# Medicare search interface
+# Medicare interface
 # ============================================================
 
-elif (
-    pricing_source
-    == "Medicare Part B ASP"
-):
+elif pricing_source == MEDICARE_SOURCE:
 
     st.subheader(
         "Medicare ASP Data"
     )
 
     discovery = (
-        st.session_state
-        .cms_discovery
+        st.session_state[
+            "cms_discovery"
+        ]
     )
-
-    # --------------------------------------------------------
-    # Show detected CMS file
-    # --------------------------------------------------------
 
     if discovery:
 
@@ -464,32 +476,20 @@ elif (
             )
         )
 
-        detected_quarter = (
+        quarter = (
             f"{payment['quarter']} "
             f"{payment['year']}"
         )
 
         st.success(
             f"CMS detected: "
-            f"**{detected_quarter}**"
+            f"**{quarter}**"
         )
 
         st.write(
-            f"Payment file: "
+            "Payment file: "
             f"**{payment['label']}**"
         )
-
-        if (
-            payment.get(
-                "status_text"
-            )
-        ):
-
-            st.caption(
-                payment[
-                    "status_text"
-                ]
-            )
 
         if crosswalk:
 
@@ -501,31 +501,28 @@ elif (
         else:
 
             st.warning(
-                "A matching NDC-HCPCS "
-                "crosswalk was not detected."
+                "Matching NDC-HCPCS "
+                "crosswalk not detected."
             )
 
     else:
 
         st.error(
-            "The app could not automatically "
-            "identify the current CMS ASP file."
+            "CMS file discovery failed."
         )
 
         if (
-            st.session_state
-            .cms_discovery_error
+            st.session_state[
+                "cms_discovery_error"
+            ]
         ):
 
             st.caption(
-                st.session_state
-                .cms_discovery_error
+                st.session_state[
+                    "cms_discovery_error"
+                ]
             )
 
-
-    # --------------------------------------------------------
-    # Choose automatic or manual source
-    # --------------------------------------------------------
 
     medicare_mode = st.radio(
         "Medicare data source",
@@ -536,30 +533,24 @@ elif (
     )
 
 
-    # --------------------------------------------------------
-    # CMS detected file confirmation
-    # --------------------------------------------------------
-
     if (
         medicare_mode
         == "Use CMS-detected latest file"
     ):
 
-        cms_confirmed = st.checkbox(
-            "I confirm this is the CMS file "
-            "I want to use."
+        cms_confirmed = (
+            st.checkbox(
+                "I confirm this is the CMS "
+                "file I want to use."
+            )
         )
-
-
-    # --------------------------------------------------------
-    # User-supplied CMS files
-    # --------------------------------------------------------
 
     else:
 
         payment_upload = (
             st.file_uploader(
-                "Medicare Part B Payment Limit file",
+                "Medicare Part B "
+                "Payment Limit file",
                 type=[
                     "xlsx",
                     "xls",
@@ -581,16 +572,6 @@ elif (
             )
         )
 
-        st.caption(
-            "The NDC-HCPCS crosswalk is "
-            "recommended for searching by "
-            "drug name or NDC."
-        )
-
-
-    # --------------------------------------------------------
-    # Medicare search criteria
-    # --------------------------------------------------------
 
     st.subheader(
         "Search Criteria"
@@ -598,7 +579,9 @@ elif (
 
     drug_name = st.text_input(
         "Drug name / description",
-        placeholder="Example: Pembrolizumab",
+        placeholder=(
+            "Example: Pembrolizumab"
+        ),
     )
 
     hcpcs = st.text_input(
@@ -613,7 +596,118 @@ elif (
 
 
 # ============================================================
-# Dataset buttons
+# RED BOOK test interface
+# ============================================================
+
+elif (
+    pricing_source
+    == REDBOOK_SOURCE_NAME
+):
+
+    st.subheader(
+        "RED BOOK Test Integration"
+    )
+
+    st.warning(
+        "This source is NOT connected to "
+        "Merative RED BOOK. It is intended "
+        "only for testing the future RED BOOK "
+        "workflow using synthetic or "
+        "user-created data."
+    )
+
+
+    # --------------------------------------------------------
+    # Download synthetic template
+    # --------------------------------------------------------
+
+    redbook_template = (
+        create_redbook_test_template()
+    )
+
+    st.download_button(
+        label=(
+            "Download RED BOOK Test Template"
+        ),
+        data=redbook_template,
+        file_name=(
+            "RedBook_Test_Template.xlsx"
+        ),
+        mime=(
+            "application/"
+            "vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+    )
+
+
+    # --------------------------------------------------------
+    # Upload test file
+    # --------------------------------------------------------
+
+    redbook_upload = (
+        st.file_uploader(
+            "Upload RED BOOK test file",
+            type=[
+                "xlsx",
+                "xls",
+                "csv",
+            ],
+        )
+    )
+
+
+    if redbook_upload is not None:
+
+        try:
+
+            redbook_df = (
+                load_redbook_test_file(
+                    redbook_upload.getvalue(),
+                    redbook_upload.name,
+                )
+            )
+
+            st.success(
+                f"Loaded "
+                f"{len(redbook_df):,} "
+                f"test pricing records."
+            )
+
+        except Exception as error:
+
+            st.error(
+                "RED BOOK test file "
+                "could not be loaded."
+            )
+
+            st.exception(
+                error
+            )
+
+
+    st.subheader(
+        "Search Criteria"
+    )
+
+    trade_name = st.text_input(
+        "Trade name",
+        placeholder="Example: TestDrug A",
+    )
+
+    generic_name = st.text_input(
+        "Generic name",
+        placeholder="Example: testgeneric-a",
+    )
+
+    ndc = st.text_input(
+        "NDC",
+        placeholder="Example: 00000-0001-01",
+    )
+
+
+# ============================================================
+# Buttons
 # ============================================================
 
 button_col1, button_col2 = (
@@ -646,11 +740,13 @@ with button_col2:
 
 if clear_clicked:
 
-    st.session_state.combined_results = (
-        pd.DataFrame()
-    )
+    st.session_state[
+        "combined_results"
+    ] = pd.DataFrame()
 
-    st.session_state.search_history = []
+    st.session_state[
+        "search_history"
+    ] = []
 
     st.success(
         "Dataset cleared."
@@ -658,7 +754,7 @@ if clear_clicked:
 
 
 # ============================================================
-# Add search to dataset
+# Add search
 # ============================================================
 
 if add_clicked:
@@ -669,15 +765,14 @@ if add_clicked:
 
     drug_identifier = "All"
 
+    file_period = ""
+
 
     # ========================================================
     # VA
     # ========================================================
 
-    if (
-        pricing_source
-        == "VA Pharmaceutical Catalog"
-    ):
+    if pricing_source == VA_SOURCE:
 
         trade_filter = clean_filter(
             trade_name
@@ -699,44 +794,26 @@ if add_clicked:
         )
 
         search_label = (
-            build_va_search_label(
+            build_search_label(
                 trade_name=trade_filter,
                 generic_name=generic_filter,
                 ndc=ndc_filter,
             )
         )
 
-        if trade_filter:
-
-            drug_identifier = (
-                trade_filter
-            )
-
-        elif generic_filter:
-
-            drug_identifier = (
-                generic_filter
-            )
-
-        elif ndc_filter:
-
-            drug_identifier = (
-                ndc_filter
-            )
+        drug_identifier = (
+            trade_filter
+            or generic_filter
+            or ndc_filter
+            or "All"
+        )
 
 
     # ========================================================
     # Medicare
     # ========================================================
 
-    elif (
-        pricing_source
-        == "Medicare Part B ASP"
-    ):
-
-        # ----------------------------------------------------
-        # Use detected CMS files
-        # ----------------------------------------------------
+    elif pricing_source == MEDICARE_SOURCE:
 
         if (
             medicare_mode
@@ -744,14 +821,14 @@ if add_clicked:
         ):
 
             if (
-                st.session_state
-                .cms_discovery
+                st.session_state[
+                    "cms_discovery"
+                ]
                 is None
             ):
 
                 st.error(
-                    "No CMS ASP file was "
-                    "automatically detected."
+                    "No CMS file was detected."
                 )
 
                 st.stop()
@@ -761,22 +838,22 @@ if add_clicked:
 
                 st.warning(
                     "Please confirm the "
-                    "detected CMS file before "
-                    "adding results."
+                    "detected CMS file."
                 )
 
                 st.stop()
 
 
             if (
-                st.session_state
-                .medicare_dataset
+                st.session_state[
+                    "medicare_dataset"
+                ]
                 is None
             ):
 
                 with st.spinner(
-                    "Downloading and loading "
-                    "CMS Medicare data..."
+                    "Downloading CMS "
+                    "Medicare data..."
                 ):
 
                     try:
@@ -794,7 +871,7 @@ if add_clicked:
                     except Exception as error:
 
                         st.error(
-                            "CMS files could not "
+                            "CMS data could not "
                             "be loaded."
                         )
 
@@ -812,26 +889,30 @@ if add_clicked:
             )
 
 
-        # ----------------------------------------------------
-        # Use uploaded CMS files
-        # ----------------------------------------------------
+            payment = (
+                st.session_state[
+                    "cms_discovery"
+                ][
+                    "payment"
+                ]
+            )
+
+            file_period = (
+                f"{payment['quarter']} "
+                f"{payment['year']}"
+            )
+
 
         else:
 
             if payment_upload is None:
 
                 st.warning(
-                    "Please upload a Medicare "
-                    "Part B Payment Limit file."
+                    "Please upload a "
+                    "Payment Limit file."
                 )
 
                 st.stop()
-
-
-            payment_bytes = (
-                payment_upload
-                .getvalue()
-            )
 
 
             crosswalk_bytes = None
@@ -858,10 +939,12 @@ if add_clicked:
                 medicare_df = (
                     build_medicare_dataset(
                         payment_bytes=(
-                            payment_bytes
+                            payment_upload
+                            .getvalue()
                         ),
                         payment_filename=(
-                            payment_upload.name
+                            payment_upload
+                            .name
                         ),
                         crosswalk_bytes=(
                             crosswalk_bytes
@@ -881,8 +964,8 @@ if add_clicked:
             except Exception as error:
 
                 st.error(
-                    "The uploaded CMS file "
-                    "could not be loaded."
+                    "CMS file could not "
+                    "be loaded."
                 )
 
                 st.exception(
@@ -892,9 +975,10 @@ if add_clicked:
                 st.stop()
 
 
-        # ----------------------------------------------------
-        # Search Medicare dataset
-        # ----------------------------------------------------
+            file_period = (
+                "User supplied"
+            )
+
 
         drug_filter = clean_filter(
             drug_name
@@ -918,7 +1002,7 @@ if add_clicked:
 
 
         search_label = (
-            build_medicare_search_label(
+            build_search_label(
                 drug_name=drug_filter,
                 hcpcs=hcpcs_filter,
                 ndc=ndc_filter,
@@ -926,47 +1010,109 @@ if add_clicked:
         )
 
 
-        if drug_filter:
-
-            drug_identifier = (
-                drug_filter
-            )
-
-        elif hcpcs_filter:
-
-            drug_identifier = (
-                hcpcs_filter
-            )
-
-        elif ndc_filter:
-
-            drug_identifier = (
-                ndc_filter
-            )
+        drug_identifier = (
+            drug_filter
+            or hcpcs_filter
+            or ndc_filter
+            or "All"
+        )
 
 
     # ========================================================
-    # No results
+    # RED BOOK test
+    # ========================================================
+
+    elif (
+        pricing_source
+        == REDBOOK_SOURCE_NAME
+    ):
+
+        if redbook_upload is None:
+
+            st.warning(
+                "Please upload a RED BOOK "
+                "test file first."
+            )
+
+            st.stop()
+
+
+        if redbook_df is None:
+
+            st.warning(
+                "The RED BOOK test file "
+                "could not be loaded."
+            )
+
+            st.stop()
+
+
+        trade_filter = clean_filter(
+            trade_name
+        )
+
+        generic_filter = clean_filter(
+            generic_name
+        )
+
+        ndc_filter = clean_filter(
+            ndc
+        )
+
+
+        results = get_redbook_options(
+            redbook_df,
+            trade_name=trade_filter,
+            generic_name=generic_filter,
+            ndc=ndc_filter,
+        )
+
+
+        search_label = (
+            build_search_label(
+                trade_name=trade_filter,
+                generic_name=generic_filter,
+                ndc=ndc_filter,
+            )
+        )
+
+
+        drug_identifier = (
+            trade_filter
+            or generic_filter
+            or ndc_filter
+            or "All"
+        )
+
+
+        file_period = (
+            "Synthetic/Test Upload"
+        )
+
+
+    # ========================================================
+    # No matches
     # ========================================================
 
     if results.empty:
 
         st.warning(
             "No matching products found. "
-            "Nothing was added to the dataset."
+            "Nothing was added."
         )
 
 
     # ========================================================
-    # Add results
+    # Add matches
     # ========================================================
 
     else:
 
         search_number = (
             len(
-                st.session_state
-                .search_history
+                st.session_state[
+                    "search_history"
+                ]
             )
             + 1
         )
@@ -987,62 +1133,23 @@ if add_clicked:
 
             "RowsMatched":
                 len(results),
+
+            "FilePeriod":
+                file_period,
         }
 
 
-        # Medicare quarter metadata
-        if (
-            pricing_source
-            == "Medicare Part B ASP"
-        ):
-
-            if (
-                medicare_mode
-                == "Use CMS-detected latest file"
-                and st.session_state
-                .cms_discovery
-            ):
-
-                payment = (
-                    st.session_state
-                    .cms_discovery[
-                        "payment"
-                    ]
-                )
-
-                search_record[
-                    "FilePeriod"
-                ] = (
-                    f"{payment['quarter']} "
-                    f"{payment['year']}"
-                )
-
-            else:
-
-                search_record[
-                    "FilePeriod"
-                ] = "User supplied"
-
-        else:
-
-            search_record[
-                "FilePeriod"
-            ] = ""
-
-
-        st.session_state.search_history.append(
+        st.session_state[
+            "search_history"
+        ].append(
             search_record
         )
 
 
-        # ----------------------------------------------------
-        # Add source results to combined dataset
-        # ----------------------------------------------------
-
         if (
-            st.session_state
-            .combined_results
-            .empty
+            st.session_state[
+                "combined_results"
+            ].empty
         ):
 
             st.session_state[
@@ -1065,10 +1172,6 @@ if add_clicked:
             )
 
 
-        # ----------------------------------------------------
-        # Remove exact duplicate records
-        # ----------------------------------------------------
-
         st.session_state[
             "combined_results"
         ] = (
@@ -1083,9 +1186,9 @@ if add_clicked:
 
 
         st.success(
-            f"Added {len(results):,} "
-            f"matching rows for "
-            f"{search_label}."
+            f"Added "
+            f"{len(results):,} rows "
+            f"for {search_label}."
         )
 
 
@@ -1093,10 +1196,9 @@ if add_clicked:
 # Search history
 # ============================================================
 
-if (
-    st.session_state
-    .search_history
-):
+if st.session_state[
+    "search_history"
+]:
 
     st.divider()
 
@@ -1105,8 +1207,9 @@ if (
     )
 
     searches_df = pd.DataFrame(
-        st.session_state
-        .search_history
+        st.session_state[
+            "search_history"
+        ]
     )
 
     st.dataframe(
@@ -1117,74 +1220,35 @@ if (
 
 
 # ============================================================
-# Combined results
+# Combined dataset
 # ============================================================
 
 if (
-    not st.session_state
-    .combined_results
-    .empty
+    not st.session_state[
+        "combined_results"
+    ].empty
 ):
 
     st.divider()
 
     results = (
-        st.session_state
-        .combined_results
-        .copy()
+        st.session_state[
+            "combined_results"
+        ].copy()
     )
 
-
-    # --------------------------------------------------------
-    # Sort results when possible
-    # --------------------------------------------------------
-
-    sort_columns = []
-
-    for column in [
-        "Source",
-        "TradeName",
-        "MedicareDrugName",
-        "Generic",
-        "HCPCS",
-        "NDCWithDashes",
-        "NDC",
-        "PriceType",
-    ]:
-
-        if column in results.columns:
-
-            sort_columns.append(
-                column
-            )
-
-
-    if sort_columns:
-
-        results = results.sort_values(
-            by=sort_columns,
-            na_position="last",
-        )
-
-
-    # --------------------------------------------------------
-    # Results heading
-    # --------------------------------------------------------
 
     st.subheader(
         "Combined Dataset"
     )
 
+
     st.write(
         f"**{len(results):,} unique pricing records** "
         f"from "
-        f"**{len(st.session_state.search_history):,} searches**"
+        f"**{len(st.session_state['search_history']):,} searches**"
     )
 
-
-    # --------------------------------------------------------
-    # Display results
-    # --------------------------------------------------------
 
     st.dataframe(
         results,
@@ -1220,17 +1284,38 @@ if (
                     "Calculated Package Payment Limit",
                     format="$%.4f",
                 ),
+
+            "WACPackagePrice":
+                st.column_config.NumberColumn(
+                    "WAC Package Price",
+                    format="$%.2f",
+                ),
+
+            "WACUnitPrice":
+                st.column_config.NumberColumn(
+                    "WAC Unit Price",
+                    format="$%.4f",
+                ),
+
+            "AWPPackagePrice":
+                st.column_config.NumberColumn(
+                    "AWP Package Price",
+                    format="$%.2f",
+                ),
+
+            "AWPUnitPrice":
+                st.column_config.NumberColumn(
+                    "AWP Unit Price",
+                    format="$%.4f",
+                ),
         },
     )
 
 
-    # --------------------------------------------------------
-    # Excel export
-    # --------------------------------------------------------
-
     searches_df = pd.DataFrame(
-        st.session_state
-        .search_history
+        st.session_state[
+            "search_history"
+        ]
     )
 
 
@@ -1239,14 +1324,18 @@ if (
     )
 
 
-    excel_data = dataframe_to_excel(
-        results,
-        searches_df,
+    excel_data = (
+        dataframe_to_excel(
+            results,
+            searches_df,
+        )
     )
 
 
     st.download_button(
-        label="Download Combined Excel File",
+        label=(
+            "Download Combined Excel File"
+        ),
         data=excel_data,
         file_name=filename,
         mime=(
