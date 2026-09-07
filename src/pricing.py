@@ -3,16 +3,37 @@ def get_drug_options(
     trade_name=None,
     generic_name=None,
     ndc=None,
-    price_type=None,
-    strength_unit=None,
 ):
     """
-    Return drug pricing options using optional filters.
+    Filter pharmaceutical pricing data using optional user criteria.
 
     All filters are optional.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Normalized pharmaceutical pricing data.
+
+    trade_name : str, optional
+        Partial match against TradeName.
+
+    generic_name : str, optional
+        Partial match against Generic.
+
+    ndc : str, optional
+        Partial match against NDCWithDashes.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Filtered pricing data with all original and derived columns retained.
     """
 
     result = df.copy()
+
+    # ---------------------------------------------------------
+    # Trade name filter
+    # ---------------------------------------------------------
 
     if trade_name:
         result = result[
@@ -22,8 +43,13 @@ def get_drug_options(
                 trade_name,
                 case=False,
                 na=False,
+                regex=False,
             )
         ]
+
+    # ---------------------------------------------------------
+    # Generic name filter
+    # ---------------------------------------------------------
 
     if generic_name:
         result = result[
@@ -33,8 +59,13 @@ def get_drug_options(
                 generic_name,
                 case=False,
                 na=False,
+                regex=False,
             )
         ]
+
+    # ---------------------------------------------------------
+    # NDC filter
+    # ---------------------------------------------------------
 
     if ndc:
         result = result[
@@ -46,22 +77,6 @@ def get_drug_options(
                 na=False,
                 regex=False,
             )
-        ]
-
-    if price_type:
-        result = result[
-            result["PriceType"]
-            .astype(str)
-            .str.upper()
-            .eq(price_type.upper())
-        ]
-
-    if strength_unit:
-        result = result[
-            result["StrengthUnit"]
-            .astype(str)
-            .str.upper()
-            .eq(strength_unit.upper())
         ]
 
     return result.reset_index(drop=True)
